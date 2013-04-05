@@ -1,124 +1,127 @@
-"""
-Python 3 user library for corobots project
-
-Based on Java library
+"""Python 3 user library for the Corobots project.
 
 Z. Butler, Jan 2013
-"""
-import socket
-import os
-import RobotMap
+M. Bogue, April 2013
 
-class RobotConnectionException(Exception):
+"""
+from collections import deque
+import os
+from queue import Queue
+import socket
+
+from corobot.map import Map
+
+class CorobotException(Exception):
     pass
 
 class Robot():
-    __slots__ = ('sockin', 'sockout', 'USER_PORT')
 
-    def __init__(self):
-        """
-           Creates connection to robot
-        """
-        print('Connecting to robot...')
-        self.USER_PORT = 15001
-        self._open_socket()
+    class Future():
 
-    def _open_socket(self):
-        """
-        Creates the connection to the robot.
-        """
+        def __init__(self):
+            self._data = None
+            self._error = None
+            self._event = Event()
+            self._callbacks = []
+            self._error_callbacks = []
+
+        def wait(self):
+            self._event.wait()
+            if self._error:
+                raise CorobotException(self._error)
+
+        def then(self, callback=None, error=None):
+            if callback is not None:
+                if not callable(callback):
+                    raise CorobotException("Callback must be callable.")
+                self._callbacks.append(callback)
+            if error is not None:
+                if not callable(error):
+                    raise CorobotException("Error callback must be callable.")
+                self._error_callbacks.append(error)
+
+        def get(self):
+            self.wait()
+            return self._data
+
+        def fulfilled(self):
+            return self._event.is_set()
+
+    def __init__(self, host, port):
+        """Creates connection to robot."""
         try:
-            robotaddr = os.getenv('ROBOT')
-            sock = socket.create_connection((robotaddr,self.USER_PORT))
-            self.sockout = sock.makefile('w')
-            self.sockin = sock.makefile('r')
+            self.socket = socket.create_connection((addr, port))
         except OSError:
-            print('Error connecting to assigned robot. Please try again')
-            raise RobotConnectionException()
-    
-    def navigate_to_location(self,location,block):
-        """
-        Drives the robot to the given location, including a full path plan.
+            raise CorobotException("Couldn't connect to robot at %s:%s" % (addr, port))
+        self.next_msg_id = 1
+        self.msg_queue = deque()
+        self.msg_queue_event = Event()
+        self.futures = {}
+        self.socket_out = self.socket.makefile("w")
+        self.out_lock = threading.Lock()
+        self.reader_thread = Thread(target=self._socket_reader, daemon=True)
+        self.message_thread = Thread(target=self._message_handler)
+        self.running = True
+        self.reader_thread.start()
+        self.message_thread.start()
 
-        location - destination: name of a map node (waypoint)
-        block - whether or not to block (wait for destination to be reached before returning)
+    def _socket_reader(self):
+        with self.socket.makefile("r") as socket_in:
+            for line in socket_in:
+                self.msg_queue.append(line)
+                self.msg_queue_event.set()
+                self.msg_queue_event.clear()
 
-        Returns whether or not location was reached successfully
-        """
-        location = location.upper()
-        if RobotMap.is_node(location):
-            msg = 'NAVTOLOC ' + location + '\n'
-            self.sockout.write(msg)
-            self.sockout.flush()
-            if block:
-                return self._query_arrive()
+    def _message_handler(self):
+        while self.running or msg_queue:
+            msg_queue_event.wait()
+            msg = msg_queue.popleft()
+            tokens = msg.split()
+            msg_id = int(tokens[0])
+            key = tokens[1]
+            data = tokens[2:]
+            future = self.futures.pop(msg_id)
+            if key == "POS":
+                future._data = tuple(map(float, data))
+            if key != "ERROR":
+                for callback in future._callbacks:
+                    callback()
             else:
-                return True
-        else:
-            return False
+                future._error = " ".join(data)
+                for error_callback in future._error_callbacks:
+                    error_callback(future._error)
+            future._event.set()
 
-    def go_to_location(self,location,block):
-        """
-        Drives the robot in a straight line to the given location.
+    def _write_message(self, msg):
+        with self.out_lock:
+            msg_id = self.next_msg_id
+            self.next_msg_id += 1
+            self.socket_out.write("%d %s\n" % (msg_id, msg))
+            self.socket_out.flush()
+            future = Future()
+            self.futures[msg_id] = future
+            return future
 
-        location - destination: name of a map node (waypoint)
-        block - whether or not to block (wait for destination to be reached before returning)
+    def nav_to(self, location):
+        """Drives the robot to the given location with path planning."""
+        return self._write_message("NAVTOLOC " + location.upper())
 
-        Returns whether or not location was reached successfully
-        """
-        location = location.upper()
-        if RobotMap.is_node(location):
-            msg = 'GOTOLOC ' + location + '\n'
-            self.sockout.write(msg)
-            self.sockout.flush()
-            if block:
-                return self._query_arrive()
-            else:
-                return True
-        else:
-            return False
+    def nav_to_xy(self, x, y):
+        """Drives the robot to the given location with path planning."""
+        return self._write_message("NAVTOXY %d %d" % (x, y))
 
-    def go_to_XY(self,x,y,block):
-        """
-        Drives the robot in a straight line to the given coordinates.
-        x, y - location to drive to
-        block - whether or not to block (wait for destination to be reached before returning)
+    def go_to(self, location):
+        """Drives the robot in a straight line to the given location."""
+        return self._write_message("GOTOLOC " + location.upper())
 
-        Returns whether or not location was reached successfully
-        """
-        msg = 'GOTOXY ' + str(x) + ' ' + str(y) + '\n'
-        self.sockout.write(msg)
-        self.sockout.flush()
-        if block:
-            return self._query_arrive()
-        else:
-            return True
-
-    def _query_arrive(self):
-        """
-        Internal method used for blocking gotos
-        """
-        self.sockout.write('QUERY_ARRIVE\n')
-        self.sockout.flush()
-        gotback = self.sockin.readline()
-        return gotback[:6] == 'ARRIVE'
+    def go_to_xy(self, x, y):
+        """Drives the robot in a straight line to the given coordinates."""
+        return self._write_message("GOTOXY %d %d" % (x, y))
 
     def get_pos(self):
-        """ 
-        Asks robot for its position, returns an (x,y) tuple
-        """
-        self.sockout.write('GETPOS\n')
-        self.sockout.flush()
-        posstr = self.sockin.readline()
-        posparts = posstr.split(' ')
-        if posparts[0] != 'POS':
-            raise Exception()
-        else:
-            return (float(posparts[1]),float(posparts[2]))
+        """Returns the robot's position as an (x, y, theta) tuple."""
+        return self._write_message("GETPOS")
 
     def get_closest_loc(self):
-        """
-        Returns the closest node to the current robot location
-        """
-        pos = self.get_pos()
-        return RobotMap.get_closest_node(pos)
+        """Returns the closest node to the current robot location."""
+        raise NotImplementedError()
