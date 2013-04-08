@@ -47,12 +47,12 @@ class Robot():
         def fulfilled(self):
             return self._event.is_set()
 
-    def __init__(self, host, port):
+    def __init__(self, addr, port):
         """Creates connection to robot."""
         try:
             self.socket = socket.create_connection((addr, port))
         except OSError:
-            raise CorobotException("Couldn't connect to robot at %s:%s" % (addr, port))
+            raise CorobotException("Couldn't connect to robot at %s:%d" % (addr, port))
         self.next_msg_id = 1
         self.msg_queue = deque()
         self.msg_queue_event = Event()
@@ -70,27 +70,28 @@ class Robot():
             for line in socket_in:
                 self.msg_queue.append(line)
                 self.msg_queue_event.set()
-                self.msg_queue_event.clear()
 
     def _message_handler(self):
-        while self.running or msg_queue:
-            msg_queue_event.wait()
-            msg = msg_queue.popleft()
-            tokens = msg.split()
-            msg_id = int(tokens[0])
-            key = tokens[1]
-            data = tokens[2:]
-            future = self.futures.pop(msg_id)
-            if key == "POS":
-                future._data = tuple(map(float, data))
-            if key != "ERROR":
-                for callback in future._callbacks:
-                    callback()
-            else:
-                future._error = " ".join(data)
-                for error_callback in future._error_callbacks:
-                    error_callback(future._error)
-            future._event.set()
+        while self.running:
+            while msg_queue:
+                msg = self.msg_queue.popleft()
+                tokens = msg.split(" ")
+                msg_id = int(tokens[0])
+                key = tokens[1]
+                data = tokens[2:]
+                future = self.futures.pop(msg_id)
+                if key == "POS":
+                    future._data = tuple(map(float, data))
+                if key != "ERROR":
+                    for callback in future._callbacks:
+                        callback()
+                else:
+                    future._error = " ".join(data)
+                    for error_callback in future._error_callbacks:
+                        error_callback(future._error)
+                future._event.set()
+            self.msg_queue_event.wait()
+            self.msg_queue_event.clear()
 
     def _write_message(self, msg):
         with self.out_lock:
