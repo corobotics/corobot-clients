@@ -128,3 +128,21 @@ class Robot():
     def get_closest_loc(self):
         """Returns the closest node to the current robot location."""
         raise NotImplementedError()
+
+    def close(self):
+        self.running = False
+        with self.out_lock:
+            try:
+                self.socket_out.close()
+            except socket.error:
+                pass
+        try:
+            self.socket.close()
+        except socket.error:
+            pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.close()
