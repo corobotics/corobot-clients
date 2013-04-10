@@ -10,44 +10,11 @@ from queue import Queue
 import socket
 from threading import Event, Lock, Thread
 
+from corobot.common import CorobotException
+from corobot.future import Future
 from corobot.map import Map
 
-class CorobotException(Exception):
-    pass
-
 class Robot():
-
-    class Future():
-
-        def __init__(self):
-            self._data = None
-            self._error = None
-            self._event = Event()
-            self._callbacks = []
-            self._error_callbacks = []
-
-        def wait(self):
-            self._event.wait()
-            if self._error:
-                raise CorobotException(self._error)
-
-        def then(self, callback=None, error=None):
-            if callback is not None:
-                if not callable(callback):
-                    raise CorobotException("Callback must be callable.")
-                self._callbacks.append(callback)
-            if error is not None:
-                if not callable(error):
-                    raise CorobotException("Error callback must be callable.")
-                self._error_callbacks.append(error)
-            return self
-
-        def get(self):
-            self.wait()
-            return self._data
-
-        def fulfilled(self):
-            return self._event.is_set()
 
     def __init__(self, addr, port):
         """Creates connection to robot."""
@@ -101,7 +68,7 @@ class Robot():
             self.next_msg_id += 1
             self.socket_out.write("%d %s\n" % (msg_id, msg))
             self.socket_out.flush()
-            future = Robot.Future()
+            future = Future()
             self.futures[msg_id] = future
             return future
 
