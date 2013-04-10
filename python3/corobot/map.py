@@ -38,7 +38,7 @@ class Map():
         """Returns names of all nodes in the map."""
         return self.nodes.keys()
 
-    def get_node(self.name):
+    def get_node(self, name):
         """Returns a Map.Node object for the given name."""
         return self.nodes[name.upper()]
 

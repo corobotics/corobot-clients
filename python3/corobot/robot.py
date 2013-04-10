@@ -8,6 +8,7 @@ from collections import deque
 import os
 from queue import Queue
 import socket
+from threading import Event, Lock, Thread
 
 from corobot.map import Map
 
@@ -39,6 +40,7 @@ class Robot():
                 if not callable(error):
                     raise CorobotException("Error callback must be callable.")
                 self._error_callbacks.append(error)
+            return self
 
         def get(self):
             self.wait()
@@ -58,8 +60,8 @@ class Robot():
         self.msg_queue_event = Event()
         self.futures = {}
         self.socket_out = self.socket.makefile("w")
-        self.out_lock = threading.Lock()
-        self.reader_thread = Thread(target=self._socket_reader, daemon=True)
+        self.out_lock = Lock()
+        self.reader_thread = Thread(target=self._socket_reader)
         self.message_thread = Thread(target=self._message_handler)
         self.running = True
         self.reader_thread.start()
@@ -73,7 +75,7 @@ class Robot():
 
     def _message_handler(self):
         while self.running:
-            while msg_queue:
+            while self.msg_queue:
                 msg = self.msg_queue.popleft()
                 tokens = msg.split(" ")
                 msg_id = int(tokens[0])
@@ -99,7 +101,7 @@ class Robot():
             self.next_msg_id += 1
             self.socket_out.write("%d %s\n" % (msg_id, msg))
             self.socket_out.flush()
-            future = Future()
+            future = Robot.Future()
             self.futures[msg_id] = future
             return future
 
