@@ -1,3 +1,4 @@
+import traceback
 from threading import Event
 
 from corobot.common import CorobotException
