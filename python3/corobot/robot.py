@@ -42,15 +42,13 @@ class Robot():
         data = tokens[2:]
         future = self.futures.pop(msg_id)
         if key == "POS":
-            future._data = tuple(map(float, data))
-        if key != "ERROR":
-            for callback in future._callbacks:
-                callback()
+            data = tuple(map(float, data))
         else:
-            future._error = " ".join(data)
-            for error_callback in future._error_callbacks:
-                error_callback(future._error)
-        future._event.set()
+            data = None
+        if key != "ERROR":
+            future._fulfilled(data)
+        else:
+            future._error_occured(" ".join(data))
 
     def _write_message(self, msg):
         with self.out_lock:

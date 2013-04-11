@@ -38,7 +38,9 @@ class CorobotClient(LineClient):
     def handle_error(self):
         exc_type, exc, traceback = sys.exc_info()
         if self.connected:
-            pass # TODO: Interrupt waits here.
+            # Need to break out of blocking on any Future.wait() calls.
+            for future in self.robot.futures.values():
+                future._error_occured(exc)
         else:
             self.robot.error_connecting = True
             self.robot.connected_event.set()
