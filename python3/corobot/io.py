@@ -4,7 +4,6 @@ import socket
 import sys
 from threading import Event, RLock
 
-
 class LineClient(async_chat):
     """Sends line messages to the server and receives line responses."""
 
