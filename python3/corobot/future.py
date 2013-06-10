@@ -41,6 +41,8 @@ class Future():
         try:
             if data is None:
                 f()
+            elif isinstance(data, tuple):
+                f(*data)
             else:
                 f(data)
         except:
