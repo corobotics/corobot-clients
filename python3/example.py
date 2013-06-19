@@ -7,8 +7,8 @@ def callback():
 
 def main():
     """Test out simple API stuff."""
-    with Robot("127.0.1.1", 15001) as r:
-        p = r.go_to_xy(5, 5).then(callback)
+    with Robot("129.21.69.34", 15001) as r:
+        p = r.nav_to("Office3515").then(callback)
         p.wait()
         print("fin")
 

@@ -24,6 +24,7 @@ class LineClient(async_chat):
     def found_terminator(self):
         line = ''.join(map(lambda b: b.decode("utf-8"), self.received_data))
         self.line_read(line)
+        self.received_data = []
 
 class CorobotClient(LineClient):
 

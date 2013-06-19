@@ -65,7 +65,7 @@ class Robot():
 
     def nav_to_xy(self, x, y):
         """Drives the robot to the given location with path planning."""
-        return self._write_message("NAVTOXY %d %d" % (x, y))
+        return self._write_message("NAVTOXY %f %f" % (x, y))
 
     def go_to(self, location):
         """Drives the robot in a straight line to the given location."""
@@ -73,7 +73,7 @@ class Robot():
 
     def go_to_xy(self, x, y):
         """Drives the robot in a straight line to the given coordinates."""
-        return self._write_message("GOTOXY %d %d" % (x, y))
+        return self._write_message("GOTOXY %f %f" % (x, y))
 
     def get_pos(self):
         """Returns the robot's position as an (x, y, theta) tuple."""
