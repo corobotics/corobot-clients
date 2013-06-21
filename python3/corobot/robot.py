@@ -79,6 +79,14 @@ class Robot():
         """Returns the robot's position as an (x, y, theta) tuple."""
         return self._write_message("GETPOS")
 
+    def display_message(self, msg):
+        """Requests the robot to display a message on its monitor."""
+        return self._write_message("DISPLAY " + msg)
+
+    def request_confirm(self, timeout):
+        """Requests the robot to wait for confirmation from a local human."""
+        return self._write_message("CONFIRM %d" % timeout)
+
     def get_closest_loc(self):
         """Returns the closest node to the current robot location."""
         raise NotImplementedError()

@@ -21,6 +21,8 @@ def main():
         pos = r.get_pos().get()
         p = r.nav_to(argv[1]).then(callback,errcall)
         p.wait()
+        r.display_message("Make me some coffee please!")
+        r.request_confirm(30).wait()
         r.go_to_xy(pos[0],pos[1]).wait()
 
 if __name__ == "__main__":
