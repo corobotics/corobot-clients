@@ -43,6 +43,8 @@ class Robot():
         future = self.futures.pop(msg_id)
         if key == "POS":
             data = tuple(map(float, data))
+        elif key == "CONFIRM":
+            data = bool(data)
         else:
             data = None
         if key != "ERROR":
@@ -79,13 +81,13 @@ class Robot():
         """Returns the robot's position as an (x, y, theta) tuple."""
         return self._write_message("GETPOS")
 
-    def display_message(self, msg):
+    def display_message(self, msg, timeout=120):
         """Requests the robot to display a message on its monitor."""
-        return self._write_message("DISPLAY " + msg)
+        return self._write_message("SHOW_MSG %d %s" % (timeout, msg))
 
-    def request_confirm(self, timeout):
+    def request_confirm(self, msg, timeout=120):
         """Requests the robot to wait for confirmation from a local human."""
-        return self._write_message("CONFIRM %d" % timeout)
+        return self._write_message("SHOW_MSG_CONFIRM %d %s" % (timeout, msg))
 
     def get_closest_loc(self):
         """Returns the closest node to the current robot location."""
