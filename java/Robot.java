@@ -32,6 +32,18 @@ public class Robot {
     private PrintWriter out;
     private BufferedReader in;
 
+	private int msgId;
+
+	public static final String CMD_NAVTOLOC = "NAVTOLOC",
+								CMD_NAVTOXY = "NAVTOXY",
+								CMD_GOTOLOC = "GOTOLOC",
+								CMD_GOTOXY = "GOTOXY",
+								CMD_GETPOS = "GETPOS",
+								CMD_POS = "POS",
+								CMD_SHOW_MSG = "SHOW_MSG",
+								CMD_SHOW_MSG_CONFIRM = "SHOW_MSG_CONFIRM",
+								CMD_CONFIRM = "CONFIRM";	
+
     /**
      * Constructor, starts connection to a robot...
      */
@@ -43,6 +55,18 @@ public class Robot {
         // can't think of anything else to do here?
     }
 
+	/**
+	 * Overriding Object.finalize() method in which we close the socket connection.
+	 * Finalize is not guaranteed to be called immediately or might not get called at all 
+	 * if the robot object is still referenced in code.
+	 */
+	protected void finalize() throws Throwable {
+     try {
+         this.closeSocket();
+     } finally {
+         super.finalize();
+     }
+ }
     /**
      * crap!  how does the server tell us which robot 
      * without making the user code do something?  
@@ -50,7 +74,7 @@ public class Robot {
      */
     private void openSocket() {
         try {
-            String robotName = System.getenv("ROBOT");
+            String robotName = "corobot2.rit.edu";//System.getenv("ROBOT");
             sock = new Socket(robotName, USER_PORT);
             out = new PrintWriter(sock.getOutputStream());
             in = new BufferedReader(new InputStreamReader(sock.getInputStream()));
@@ -60,6 +84,51 @@ public class Robot {
         }
     }
 
+	/**
+	 * This method is provided in order to close the socket connection manually.
+	 * It should be called by the users of the Robot object after they are done using it.
+	 */
+	public void closeSocket(){
+		try{
+			if(sock != null && !sock.isClosed())
+			sock.close(); // closes the in and out streams too
+		} catch(Exception e){
+			System.err.println("IOException thrown in Robot.closeSocket()");
+		}
+	}
+
+	/**
+	 * This method can send commands (messages) to the robot as per the specified format in API.md
+	 *
+	 * @param args: String vararg parameters to take the command and its options and send it to the 
+	 * robot over the socket connection.
+	 */
+	public void	sendMsgToRobot(String... args){
+		StringBuilder msgToSend = new StringBuilder((msgId++) + "");
+		for (String arg : args )
+			msgToSend.append(" " + arg);
+		out.println(msgToSend.toString());
+		out.flush();
+	}
+
+	/**
+	 * This checks whether the response from the robot contains the word 'arrived'
+	 * @return : True or False
+	 */
+	private boolean checkArrivedResponse(String methodName){
+		String response = null;
+		try {
+			response = in.readLine();
+			System.out.println("the respose for " + methodName + "() is " + response);
+		} catch (IOException e) {
+			System.err.println("Lost connection with robot!");
+			throw new RobotConnectionException("in " + methodName + "()");
+		}
+		if(response.toLowerCase().contains("arrived"))
+			return true;
+		return false;
+	}
+
     /**
      * Plans and executes a path to the given location.  Planning is done by the robot.
      *
@@ -67,20 +136,30 @@ public class Robot {
      * @param block specifies whether this call blocks until location reached or some failure condition.
      * @return return whether location has been reached (if blocking)
      */
-    public boolean navigateToLocation(String location, boolean block) {
+    public boolean navigateToLocation(String location) {
         location = location.toUpperCase();
         if (RobotMap.isNode(location)) {
-            out.println("NAVTOLOC " + location.toUpperCase());
-            out.flush();
-            if (block)
-                return queryArrive();
-            return true;
+			sendMsgToRobot(CMD_NAVTOLOC, location.toUpperCase());
+			return checkArrivedResponse("navigateToLocation");
         }
         else {
             return false;
         }
     }
     
+
+	/**
+     * Plans and executes a path to the given coordinates.  Planning is done by the robot.
+     *
+     * @param x : x-coordinate in the map
+     * @param y: y-coordinate in the map
+     * @return True or False based on whether the robot succeeded in reaching the coordinates specified.
+     */
+	public boolean navigateToXY(double x, double y){
+	   sendMsgToRobot(CMD_NAVTOXY, x+"", y+"");
+	   return checkArrivedResponse("navigateToXY");
+	}
+
     /**
      * Attempts to move in a straight line to the given location.
      *
@@ -89,15 +168,12 @@ public class Robot {
      * @param block specifies whether this call blocks until location reached or some failure condition.
      * @return return whether location has been reached (if blocking)
      */
-    public boolean goToLocation(String location, boolean block) {
+    public boolean goToLocation(String location) {
         location = location.toUpperCase();
         if (RobotMap.isNode(location)) {
-            out.println("GOTOLOC " + location.toUpperCase());
-            out.flush();
-            if (block)
-                return queryArrive();
-            return true;
-        }
+			sendMsgToRobot(CMD_GOTOLOC, location.toUpperCase());
+			return checkArrivedResponse("goToLocation");
+		}
         else {
             return false;
         }
@@ -110,20 +186,15 @@ public class Robot {
      * @param block specifies whether this call blocks until location reached or some failure condition.
      * @return return whether location has been reached (if blocking)
      */
-    public boolean goToXY(double x, double y, boolean block) {
-        out.println("GOTOXY " + x + " " + y);
-        out.flush();
-        if (block) 
-            return queryArrive();
-        else
-            // if non-blocking, be optimistic.
-            return true;
+    public boolean goToXY(double x, double y) {
+       	sendMsgToRobot(CMD_GOTOXY, x+"", y+"");
+		return checkArrivedResponse("goToXY");
     }
 
     /**
      * Used by goto functions to wait for ack from robot
      */
-    private boolean queryArrive() {
+    /*private boolean queryArrive() {
         out.println("QUERY_ARRIVE");
         out.flush();
         String line = "";
@@ -136,27 +207,27 @@ public class Robot {
             throw new RobotConnectionException("while waiting for robot to reach destination");
         }
         return line.equals("ARRIVE");
-    }
+    }*/
 
     /**
      * Queries the robot for its current position in map coordinates
      * @return position
      */
     public Point getPos() {
-        out.println("GETPOS");
-        out.flush();
-        String strpos = "";
-        try {
-            strpos = in.readLine();
-        } catch (IOException e) {
-            System.err.println("Lost connection with robot!");
-            throw new RobotConnectionException("in getPos()");
-        }
-        Scanner inscan = new Scanner(strpos);
-        if (!(inscan.next().equals("POS")))
-            // trouble, crossed signals, what to do?
-            return null;
-        return new Point(inscan.nextDouble(), inscan.nextDouble());
+		sendMsgToRobot(CMD_GETPOS);
+        String strpos = null;
+		try {
+			strpos = in.readLine();
+			System.out.println("the respose for getPos() is " + strpos);
+		} catch (IOException e) {
+			System.err.println("Lost connection with robot!");
+			throw new RobotConnectionException("in getPos()");
+		}
+		String tokens[] = strpos.split(" ");
+		if (!(tokens[1].equals(CMD_POS)))
+			// trouble, crossed signals, what to do?
+			return null;
+		return new Point(Double.parseDouble(tokens[2]), Double.parseDouble(tokens[3]));
     }
 
     /** 
@@ -184,13 +255,41 @@ public class Robot {
     /**
      * Sends a message for display on the local (robot) GUI
      * @param msg Message to display (&lt; 256 chars suggested)
+	 * @param timeout : timeout duration 
      */
     // show a message on the laptop GUI
-    public void displayMessage(String msg) {
+    public void showMessage(String msg, int timeout) {
         if (msg.length() > 255)
             msg = msg.substring(0,255);
-        out.println("DISPLAY " + msg);
-        out.flush();
+		if (timeout > 120)
+            timeout = 120;
+        sendMsgToRobot(CMD_SHOW_MSG, timeout+"", msg);
+    }
+
+	/**
+     * Sends a message for display on the local (robot) GUI
+     * @param msg Message to display (&lt; 256 chars suggested)
+	 * @param timeout : timeout duration 
+     */
+    // show a message on the laptop GUI
+	public Boolean showMessageWithConfirmation(String msg, int timeout) {
+         if (msg.length() > 255)
+            msg = msg.substring(0,255);
+		 if (timeout > 120)
+            timeout = 120;
+		 sendMsgToRobot(CMD_SHOW_MSG_CONFIRM, timeout+"", msg);
+		String response = null;
+        try {
+            response = in.readLine();
+			System.out.println("the respose for Robot.showMessageWithConfirmation() is " + response);
+        } catch (IOException e) {
+            System.err.println("Lost connection with robot!");
+            throw new RobotConnectionException("in Robot.showMessageWithConfirmation()");
+        }
+        String[] tokens = response.split(" ");
+        if (!(tokens[1].equals(CMD_CONFIRM)))
+            return null;
+        return Boolean.parseBoolean(tokens[2]);
     }
     
     /**
@@ -200,13 +299,13 @@ public class Robot {
      * @param timeout Amount of time to wait for a response (in seconds) 
      * @return whether confirmed (true) or timed out (false)
      */
-    public boolean waitForConfirm(int timeout) {
+    /*public boolean waitForConfirm(int timeout) {
         if (timeout > 120)
             timeout = 120;
         out.println("CONFIRM " + timeout);
         out.flush();
         return true;
-    }
+    }*/
         
     // RobotMap class contains a dictionary of String->MapNode
     // MapNode contains String name, double x,y, List<String> neighbors(?)

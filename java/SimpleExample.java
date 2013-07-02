@@ -20,11 +20,12 @@ public class SimpleExample {
         //      String loc = robot.getClosestLoc();
         //      System.out.println("Closest location is " + loc);
         //      robot.goToLocation(loc, true);
-        robot.displayMessage("I'm heading to the Atrium!");
-        robot.navigateToLocation("AtriumS3",true);
-        if (robot.goToXY(p.getX() - 1.5, p.getY() + 1.0, true)) 
+        robot.showMessage("I'm heading to the Atrium!", 20);
+        if(robot.navigateToLocation("AtriumS3"))
+        //if (robot.goToXY(p.getX() - 1.5, p.getY() + 1.0)) 
             System.out.println("Made it!");
         else
             System.out.println("didn't make it.");
+		robot.closeSocket();
     }
 }
