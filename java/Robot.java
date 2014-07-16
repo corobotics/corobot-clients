@@ -5,6 +5,7 @@
  * Could be used as starting point for "real" API
  *
  * @author Z. Butler, Jan 2013
+ * @author E. Klei, Jul 2014
  */
 
 /*
@@ -31,7 +32,7 @@ public class Robot {
     private Socket sock;
     private PrintWriter out;
     private BufferedReader in;
-
+    private ArrayList<Future> futures;
 	private int msgId;
 
 	public static final String CMD_NAVTOLOC = "NAVTOLOC",
@@ -47,11 +48,19 @@ public class Robot {
     /**
      * Constructor, starts connection to a robot...
      */
-    public Robot() {
+	public Robot(){
+		msgId = 1;
+		futures = new ArrayList<Future>();
+		System.err.println("Connecting to robot...");
+		openSocket("127.0.0.1");
+	}
+    public Robot(String address) {
         // offloaded to another function for now mostly so that
-        // Javadocs can be hidden 
+        // Javadocs can be hidden
+        msgId = 1;
+		futures = new ArrayList<Future>(); 
         System.err.println("Connecting to robot...");
-        openSocket();
+        openSocket(address);
         // can't think of anything else to do here?
     }
 
@@ -72,10 +81,10 @@ public class Robot {
      * without making the user code do something?  
      * Environment var maybe?
      */
-    private void openSocket() {
+    private void openSocket(String address) throws RobotConnectionException{
         try {
             String robotName = "corobot2.rit.edu";//System.getenv("ROBOT");
-            sock = new Socket(robotName, USER_PORT);
+            sock = new Socket(address, USER_PORT);
             out = new PrintWriter(sock.getOutputStream());
             in = new BufferedReader(new InputStreamReader(sock.getInputStream()));
         } catch (IOException e) {
@@ -103,12 +112,15 @@ public class Robot {
 	 * @param args: String vararg parameters to take the command and its options and send it to the 
 	 * robot over the socket connection.
 	 */
-	public void	sendMsgToRobot(String... args){
+	public Future sendMsgToRobot(String... args){
 		StringBuilder msgToSend = new StringBuilder((msgId++) + "");
 		for (String arg : args )
 			msgToSend.append(" " + arg);
 		out.println(msgToSend.toString());
 		out.flush();
+		Future future = new Future();
+		futures.add(future);
+		return future;
 	}
 
 	/**
@@ -119,7 +131,20 @@ public class Robot {
 		String response = null;
 		try {
 			response = in.readLine();
-			System.out.println("the respose for " + methodName + "() is " + response);
+			String[] msgs = response.split(" ");
+			int id = Integer.parseInt(msgs[0]);
+			Future future = futures.remove(id);
+			String[] data = null;			
+			if( msgs[1] == "POS"){
+				data = Arrays.copyOfRange(msgs, 2, msgs.length);
+			}else if(msgs[1] == "CONFIRM"){
+				data = Arrays.copyOfRange(msgs, 2, msgs.length);
+			}
+			if( msgs[1] != "ERROR"){
+				future.fulfilled(data);
+			}else{
+				future.error_occured(new CorobotException(response.substring(2)));
+			}
 		} catch (IOException e) {
 			System.err.println("Lost connection with robot!");
 			throw new RobotConnectionException("in " + methodName + "()");
@@ -136,14 +161,13 @@ public class Robot {
      * @param block specifies whether this call blocks until location reached or some failure condition.
      * @return return whether location has been reached (if blocking)
      */
-    public boolean navigateToLocation(String location) {
+    public Future navigateToLocation(String location) throws MapException{
         location = location.toUpperCase();
         if (RobotMap.isNode(location)) {
-			sendMsgToRobot(CMD_NAVTOLOC, location.toUpperCase());
-			return checkArrivedResponse("navigateToLocation");
+			return sendMsgToRobot(CMD_NAVTOLOC, location.toUpperCase());
         }
         else {
-            return false;
+            throw new MapException("Location does not exist");
         }
     }
     
@@ -155,9 +179,8 @@ public class Robot {
      * @param y: y-coordinate in the map
      * @return True or False based on whether the robot succeeded in reaching the coordinates specified.
      */
-	public boolean navigateToXY(double x, double y){
-	   sendMsgToRobot(CMD_NAVTOXY, x+"", y+"");
-	   return checkArrivedResponse("navigateToXY");
+	public Future navigateToXY(double x, double y){
+	   return sendMsgToRobot(CMD_NAVTOXY, x+"", y+"");
 	}
 
     /**
@@ -168,14 +191,13 @@ public class Robot {
      * @param block specifies whether this call blocks until location reached or some failure condition.
      * @return return whether location has been reached (if blocking)
      */
-    public boolean goToLocation(String location) {
+    public Future goToLocation(String location) throws MapException{
         location = location.toUpperCase();
         if (RobotMap.isNode(location)) {
-			sendMsgToRobot(CMD_GOTOLOC, location.toUpperCase());
-			return checkArrivedResponse("goToLocation");
+			return sendMsgToRobot(CMD_GOTOLOC, location.toUpperCase());
 		}
         else {
-            return false;
+            throw new MapException("Location does not exist");
         }
     }
 
@@ -186,9 +208,8 @@ public class Robot {
      * @param block specifies whether this call blocks until location reached or some failure condition.
      * @return return whether location has been reached (if blocking)
      */
-    public boolean goToXY(double x, double y) {
-       	sendMsgToRobot(CMD_GOTOXY, x+"", y+"");
-		return checkArrivedResponse("goToXY");
+    public Future goToXY(double x, double y) {
+       	return sendMsgToRobot(CMD_GOTOXY, x+"", y+"");
     }
 
     /**
@@ -213,21 +234,9 @@ public class Robot {
      * Queries the robot for its current position in map coordinates
      * @return position
      */
-    public Point getPos() {
-		sendMsgToRobot(CMD_GETPOS);
-        String strpos = null;
-		try {
-			strpos = in.readLine();
-			System.out.println("the respose for getPos() is " + strpos);
-		} catch (IOException e) {
-			System.err.println("Lost connection with robot!");
-			throw new RobotConnectionException("in getPos()");
-		}
-		String tokens[] = strpos.split(" ");
-		if (!(tokens[1].equals(CMD_POS)))
-			// trouble, crossed signals, what to do?
-			return null;
-		return new Point(Double.parseDouble(tokens[2]), Double.parseDouble(tokens[3]));
+    public Future getPos() {
+		return sendMsgToRobot(CMD_GETPOS);
+       
     }
 
     /** 
@@ -236,7 +245,8 @@ public class Robot {
      * @return Name of location
      */
     public String getClosestLoc() {
-        Point p = getPos();
+        String[] s = getPos().get();
+        Point p = new Point(Double.parseDouble(s[0]), Double.parseDouble(s[1]));
         return RobotMap.getClosestNode(p.getX(),p.getY());
     }
 
@@ -247,23 +257,23 @@ public class Robot {
      * Currently not implemented.
      *
      * @return list of nearby location names
-     */
+	//TODO
     public List<String> getAllCloseLocs() {
         throw new UnsupportedOperationException();
     }
-
+     */
     /**
      * Sends a message for display on the local (robot) GUI
      * @param msg Message to display (&lt; 256 chars suggested)
 	 * @param timeout : timeout duration 
      */
     // show a message on the laptop GUI
-    public void showMessage(String msg, int timeout) {
+    public Future showMessage(String msg, int timeout) {
         if (msg.length() > 255)
             msg = msg.substring(0,255);
 		if (timeout > 120)
             timeout = 120;
-        sendMsgToRobot(CMD_SHOW_MSG, timeout+"", msg);
+        return sendMsgToRobot(CMD_SHOW_MSG, timeout+"", msg);
     }
 
 	/**
@@ -272,24 +282,12 @@ public class Robot {
 	 * @param timeout : timeout duration 
      */
     // show a message on the laptop GUI
-	public Boolean showMessageWithConfirmation(String msg, int timeout) {
+	public Future showMessageWithConfirmation(String msg, int timeout) {
          if (msg.length() > 255)
             msg = msg.substring(0,255);
 		 if (timeout > 120)
             timeout = 120;
-		 sendMsgToRobot(CMD_SHOW_MSG_CONFIRM, timeout+"", msg);
-		String response = null;
-        try {
-            response = in.readLine();
-			System.out.println("the respose for Robot.showMessageWithConfirmation() is " + response);
-        } catch (IOException e) {
-            System.err.println("Lost connection with robot!");
-            throw new RobotConnectionException("in Robot.showMessageWithConfirmation()");
-        }
-        String[] tokens = response.split(" ");
-        if (!(tokens[1].equals(CMD_CONFIRM)))
-            return null;
-        return Boolean.parseBoolean(tokens[2]);
+		 return sendMsgToRobot(CMD_SHOW_MSG_CONFIRM, timeout+"", msg);
     }
     
     /**
