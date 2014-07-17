@@ -34,7 +34,7 @@ public class Robot {
     private BufferedReader in;
     private ArrayList<Future> futures;
 	private int msgId;
-
+	private boolean halt = false;
 	public static final String CMD_NAVTOLOC = "NAVTOLOC",
 								CMD_NAVTOXY = "NAVTOXY",
 								CMD_GOTOLOC = "GOTOLOC",
@@ -53,6 +53,7 @@ public class Robot {
 		futures = new ArrayList<Future>();
 		System.err.println("Connecting to robot...");
 		openSocket("127.0.0.1");
+		new readerThread().start();
 	}
     public Robot(String address) {
         // offloaded to another function for now mostly so that
@@ -61,6 +62,7 @@ public class Robot {
 		futures = new ArrayList<Future>(); 
         System.err.println("Connecting to robot...");
         openSocket(address);
+		new readerThread().start();
         // can't think of anything else to do here?
     }
 
@@ -72,6 +74,7 @@ public class Robot {
 	protected void finalize() throws Throwable {
      try {
          this.closeSocket();
+		 halt = !halt;
      } finally {
          super.finalize();
      }
@@ -100,7 +103,7 @@ public class Robot {
 	public void closeSocket(){
 		try{
 			if(sock != null && !sock.isClosed())
-			sock.close(); // closes the in and out streams too
+				sock.close(); // closes the in and out streams too
 		} catch(Exception e){
 			System.err.println("IOException thrown in Robot.closeSocket()");
 		}
@@ -113,26 +116,28 @@ public class Robot {
 	 * robot over the socket connection.
 	 */
 	public Future sendMsgToRobot(String... args){
+		Future fut = new Future();
+		futures.add(fut);
 		StringBuilder msgToSend = new StringBuilder((msgId++) + "");
 		for (String arg : args )
 			msgToSend.append(" " + arg);
 		out.println(msgToSend.toString());
 		out.flush();
-		Future future = new Future();
-		futures.add(future);
-		return future;
+		return fut;
 	}
 
 	/**
 	 * This checks whether the response from the robot contains the word 'arrived'
 	 * @return : True or False
 	 */
-	private boolean checkArrivedResponse(String methodName){
-		String response = null;
+	private void checkArrivedResponse(){
 		try {
-			response = in.readLine();
+			String response = in.readLine();
+			if(response == null){
+				return;
+			}
 			String[] msgs = response.split(" ");
-			int id = Integer.parseInt(msgs[0]);
+			int id = Integer.parseInt(msgs[0]) - 1;
 			Future future = futures.remove(id);
 			String[] data = null;			
 			if( msgs[1] == "POS"){
@@ -147,11 +152,9 @@ public class Robot {
 			}
 		} catch (IOException e) {
 			System.err.println("Lost connection with robot!");
-			throw new RobotConnectionException("in " + methodName + "()");
+			throw new RobotConnectionException("Robot connection lost");
 		}
-		if(response.toLowerCase().contains("arrived"))
-			return true;
-		return false;
+
 	}
 
     /**
@@ -245,8 +248,12 @@ public class Robot {
      * @return Name of location
      */
     public String getClosestLoc() {
-        String[] s = getPos().get();
-        Point p = new Point(Double.parseDouble(s[0]), Double.parseDouble(s[1]));
+		String[] s = null;		
+		try{
+        	s = getPos().pause().get();
+		}catch(Exception e){
+		}        
+		Point p = new Point(Double.parseDouble(s[0]), Double.parseDouble(s[1]));
         return RobotMap.getClosestNode(p.getX(),p.getY());
     }
 
@@ -317,6 +324,12 @@ public class Robot {
     public Image getImage(int whichCamera) {    
         throw new UnsupportedOperationException();
     }
-
+	private class readerThread extends Thread{
+		public void run(){
+			while(!halt){
+				checkArrivedResponse();
+			}
+		}
+	}
     // may want other access to robot data but not sure what yet.
 }

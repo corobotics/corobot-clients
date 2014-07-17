@@ -15,12 +15,13 @@ public class Future{
 		error = null;
 		done = false;
 		awaitingIO = new Semaphore(0);
+
         running = new Thread(new responseWait());
-		running.run();
+		running.start();
 		callbacks = new ArrayList<Callback>();
     }
     
-    public void pause() throws CorobotException{
+    public Future pause() throws CorobotException{
     	try {
 			running.join();
 		} catch (InterruptedException e){
@@ -28,12 +29,9 @@ public class Future{
 		}
 		if( error != null ){
 			throw error;
-		}	
+		}
+		return this;
 	}
-    public Future then(){
-		return then(null,null);
-	}
-
     public Future then(Callback call){
     	return then(call, null);
     }
