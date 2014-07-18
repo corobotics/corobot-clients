@@ -33,8 +33,8 @@ public class Robot {
     private PrintWriter out;
     private BufferedReader in;
     private ArrayList<Future> futures;
+	private readerThread read;
 	private int msgId;
-	private boolean halt = false;
 	public static final String CMD_NAVTOLOC = "NAVTOLOC",
 								CMD_NAVTOXY = "NAVTOXY",
 								CMD_GOTOLOC = "GOTOLOC",
@@ -46,15 +46,19 @@ public class Robot {
 								CMD_CONFIRM = "CONFIRM";	
 
     /**
-     * Constructor, starts connection to a robot...
+     * Creates an instance of a robot with the localhost address
      */
 	public Robot(){
 		msgId = 1;
 		futures = new ArrayList<Future>();
 		System.err.println("Connecting to robot...");
 		openSocket("127.0.0.1");
-		new readerThread().start();
+		read = new readerThread();
 	}
+	/**
+	 * Creates an instance of a robot with a user provided address
+	 * @args address the address to construct to
+	 */
     public Robot(String address) {
         // offloaded to another function for now mostly so that
         // Javadocs can be hidden
@@ -62,7 +66,7 @@ public class Robot {
 		futures = new ArrayList<Future>(); 
         System.err.println("Connecting to robot...");
         openSocket(address);
-		new readerThread().start();
+		read = new readerThread();
         // can't think of anything else to do here?
     }
 
@@ -74,7 +78,6 @@ public class Robot {
 	protected void finalize() throws Throwable {
      try {
          this.closeSocket();
-		 halt = !halt;
      } finally {
          super.finalize();
      }
@@ -84,6 +87,11 @@ public class Robot {
      * without making the user code do something?  
      * Environment var maybe?
      */
+
+	/**
+	 * Opens a socket to the provided address
+	 * @args address The address to connect to
+	 */
     private void openSocket(String address) throws RobotConnectionException{
         try {
             String robotName = "corobot2.rit.edu";//System.getenv("ROBOT");
@@ -100,6 +108,10 @@ public class Robot {
 	 * This method is provided in order to close the socket connection manually.
 	 * It should be called by the users of the Robot object after they are done using it.
 	 */
+
+	/**
+	 * Closes the connection to the robot
+     */
 	public void closeSocket(){
 		try{
 			if(sock != null && !sock.isClosed())
@@ -118,6 +130,9 @@ public class Robot {
 	public Future sendMsgToRobot(String... args){
 		Future fut = new Future();
 		futures.add(fut);
+		if(!read.isAlive()){
+			read.start();
+		}
 		StringBuilder msgToSend = new StringBuilder((msgId++) + "");
 		for (String arg : args )
 			msgToSend.append(" " + arg);
@@ -127,8 +142,7 @@ public class Robot {
 	}
 
 	/**
-	 * This checks whether the response from the robot contains the word 'arrived'
-	 * @return : True or False
+	 * Recieves the response from the robot and acts accordingly
 	 */
 	private void checkArrivedResponse(){
 		try {
@@ -139,16 +153,11 @@ public class Robot {
 			String[] msgs = response.split(" ");
 			int id = Integer.parseInt(msgs[0]) - 1;
 			Future future = futures.remove(id);
-			String[] data = null;			
-			if( msgs[1] == "POS"){
-				data = Arrays.copyOfRange(msgs, 2, msgs.length);
-			}else if(msgs[1] == "CONFIRM"){
-				data = Arrays.copyOfRange(msgs, 2, msgs.length);
-			}
+			String[] data = Arrays.copyOfRange(msgs, 2, msgs.length);
 			if( msgs[1] != "ERROR"){
 				future.fulfilled(data);
 			}else{
-				future.error_occured(new CorobotException(response.substring(2)));
+				future.error_occured(data);
 			}
 		} catch (IOException e) {
 			System.err.println("Lost connection with robot!");
@@ -159,10 +168,8 @@ public class Robot {
 
     /**
      * Plans and executes a path to the given location.  Planning is done by the robot.
-     *
      * @param location Name (as on map) 
-     * @param block specifies whether this call blocks until location reached or some failure condition.
-     * @return return whether location has been reached (if blocking)
+     * @return A future object that activates when command finishes
      */
     public Future navigateToLocation(String location) throws MapException{
         location = location.toUpperCase();
@@ -180,7 +187,7 @@ public class Robot {
      *
      * @param x : x-coordinate in the map
      * @param y: y-coordinate in the map
-     * @return True or False based on whether the robot succeeded in reaching the coordinates specified.
+     * @return A future object that activates when command finishes
      */
 	public Future navigateToXY(double x, double y){
 	   return sendMsgToRobot(CMD_NAVTOXY, x+"", y+"");
@@ -190,9 +197,8 @@ public class Robot {
      * Attempts to move in a straight line to the given location.
      *
      * Currently not implemented, waiting for map.
-     * @param location Name (as on map) 
-     * @param block specifies whether this call blocks until location reached or some failure condition.
-     * @return return whether location has been reached (if blocking)
+     * @param location Name (as on map)
+     * @return A future object that activates when command finishes
      */
     public Future goToLocation(String location) throws MapException{
         location = location.toUpperCase();
@@ -208,8 +214,7 @@ public class Robot {
      * Attempts to move in a straight line to the given X,Y location
      * @param x X coordinate of destination (in map coordinate system) 
      * @param y Y coordinate of destination (in map coordinate system) 
-     * @param block specifies whether this call blocks until location reached or some failure condition.
-     * @return return whether location has been reached (if blocking)
+     * @return a future object that activates when command finishes
      */
     public Future goToXY(double x, double y) {
        	return sendMsgToRobot(CMD_GOTOXY, x+"", y+"");
@@ -235,7 +240,7 @@ public class Robot {
 
     /**
      * Queries the robot for its current position in map coordinates
-     * @return position
+     * @return a future object that activates when the command is completed
      */
     public Future getPos() {
 		return sendMsgToRobot(CMD_GETPOS);
@@ -250,7 +255,7 @@ public class Robot {
     public String getClosestLoc() {
 		String[] s = null;		
 		try{
-        	s = getPos().pause().get();
+        	s = getPos().get();
 		}catch(Exception e){
 		}        
 		Point p = new Point(Double.parseDouble(s[0]), Double.parseDouble(s[1]));
@@ -273,6 +278,7 @@ public class Robot {
      * Sends a message for display on the local (robot) GUI
      * @param msg Message to display (&lt; 256 chars suggested)
 	 * @param timeout : timeout duration 
+	 * @return A future object that activates when the robot is finished
      */
     // show a message on the laptop GUI
     public Future showMessage(String msg, int timeout) {
@@ -286,7 +292,8 @@ public class Robot {
 	/**
      * Sends a message for display on the local (robot) GUI
      * @param msg Message to display (&lt; 256 chars suggested)
-	 * @param timeout : timeout duration 
+	 * @param timeout : timeout duration
+     * @return A future object that activates when the robot is finished 
      */
     // show a message on the laptop GUI
 	public Future showMessageWithConfirmation(String msg, int timeout) {
@@ -324,9 +331,12 @@ public class Robot {
     public Image getImage(int whichCamera) {    
         throw new UnsupportedOperationException();
     }
+	/**
+	 * Maintains reading of the input from the server as long as there is a future
+	 */
 	private class readerThread extends Thread{
 		public void run(){
-			while(!halt){
+			while(futures.size() > 0){
 				checkArrivedResponse();
 			}
 		}
