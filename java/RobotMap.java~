@@ -20,6 +20,7 @@ public class RobotMap {
             while (input.hasNextLine()) {
                 nodeline = input.nextLine();
                 String[] parts = nodeline.split(",");
+		System.out.println (nodeline);
                 // name xpix ypix xm ym type nbrs...
                 MapNode newnode = new MapNode();
                 newnode.name = parts[0].toUpperCase();
