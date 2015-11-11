@@ -113,6 +113,18 @@ class Robot():
         """Returns the closest node to the current robot location."""
         raise NotImplementedError()
 
+    #Ronit - Face Recognition
+    def recognize_face(self):
+        """Requests the robot for face recognition results."""
+        # return self._write_message("" % ())
+        raise NotImplementedError()
+
+    def last_seen(self):
+        """Requests the robot for face recognition results."""
+        # raise NotImplementedError()    
+        return self._write_message("LASTSEEN")
+    #!Ronit
+
     def close(self):
         print("Closing connection\n")
         self.client.close_when_done()
