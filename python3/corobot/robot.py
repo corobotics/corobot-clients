@@ -31,6 +31,7 @@ class Robot():
         if (host is None):
             print ("Sorry, no IDLE corobot available.")
             raise CorobotException
+
         print ("Got IP as : %s" % str(host))
         print ("Robot assigned : %s" % robotName)
         port = 15001
@@ -58,6 +59,17 @@ class Robot():
         elif key == "LOG":
             print(data)
             return
+        elif key == "FACEREC":
+            data = tuple(data[0:1] + list(map(float,data[1:])))
+        elif key.startswith("LASTSEEN"):
+            count_ls = int(key.split("_")[-1])
+            if count_ls == 0:
+                data = []
+            else:
+                temp = []
+                for i in range(0,len(data),4):
+                    temp.append( tuple( data[i:i+1] + list(map(float, data[i+1:i+4])) ) )
+                data = temp
         else:
             data = None
         if key != "ERROR":
@@ -116,13 +128,13 @@ class Robot():
     #Ronit - Face Recognition
     def recognize_face(self):
         """Requests the robot for face recognition results."""
-        # return self._write_message("" % ())
-        raise NotImplementedError()
+        return self._write_message("FACEREC")
+        # raise NotImplementedError()
 
-    def last_seen(self):
+    def last_seen(self, no=1):
         """Requests the robot for face recognition results."""
         # raise NotImplementedError()    
-        return self._write_message("LASTSEEN")
+        return self._write_message("LASTSEEN_%d" % (no))
     #!Ronit
 
     def close(self):
