@@ -7,12 +7,16 @@
 
 import java.io.*;
 import java.net.*;
+import corobot.RobotMap;
+import corobot.MapNode;
 
 public class VirtualRobot {
 	private ServerSocket mine;
 	private Socket sock;
 	private PrintWriter out;
 	private BufferedReader in;
+    private RobotMap rmap;
+    private double x, y;
 	/**
 	 * Creates a new VirtualRobot
      */
@@ -25,6 +29,7 @@ public class VirtualRobot {
 		}catch( IOException e) {
 			e.printStackTrace();
 		}
+                rmap = new RobotMap();
 	}
     /**
      * Simulates the act of robot movement. Waits, then continues
@@ -43,7 +48,7 @@ public class VirtualRobot {
      * @args the message id to send with
      */
 	public void sendPos(int msgId){
-		out.println(msgId + " POS 0 0 0" );
+		out.println(msgId + " POS " + x + " " + y + " 0" );
 	}
     /**
      * Simulates the result of a confirm dialog
@@ -78,28 +83,42 @@ public class VirtualRobot {
      */
 	private class readerThread extends Thread{
 		public void run(){
+                    try{
 			for(;;){
-				try{
-					String given = in.readLine();
-					int id = Integer.parseInt(given.split(" ")[0]);
-					String key = given.split(" ")[1];
-					if(key.equals("NAVTOLOC") || key.equals("NAVTOXY") || key.equals("GOTOLOC") || key.equals("GOTOXY") ){
-						goPlaces(id);
-					}else if(key.equals("SHOW_MSG")){
-						showMessage();
-					}else if(key.equals("SHOW_MSG_CONFIRM")){
-						showConfirm(id);
-					}else{
-						System.out.print("Unknown command");
-					}
-				}catch(Exception e){
-				}
-				finally{
-					try{
-						sock.close();
-					}catch(Exception e){}
-				}
-			}
+                            String given = in.readLine();
+                            if (given == null) break;
+
+                            String[] parts = given.split(" ");
+                            int id = Integer.parseInt(parts[0]);
+                            String key = parts[1];
+                            if(key.equals("NAVTOLOC") || key.equals("NAVTOXY") || key.equals("GOTOLOC") || key.equals("GOTOXY") ){
+                                if (key.endsWith("XY")) {
+                                    x = Double.parseDouble(parts[2]);
+                                    y = Double.parseDouble(parts[3]);
+                                } else {
+                                    MapNode mn = rmap.getNode(parts[2]);
+                                    x = mn.x;
+                                    y = mn.y;
+                                }
+                                goPlaces(id);
+                            }else if(key.equals("SHOW_MSG")){
+                                showMessage();
+                            }else if(key.equals("SHOW_MSG_CONFIRM")){
+                                showConfirm(id);
+                            }else if (key.equals("GETPOS")) {
+                                sendPos(id);
+                            }else{
+                                System.out.print("Unknown command");
+                            }
+                        }
+                    }catch(Exception e){
+                        System.err.println(e);
+                    }
+                    finally{
+                        try{
+                            sock.close();
+                        }catch(Exception e){}
+                    }
 		}
 	}
 }

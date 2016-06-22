@@ -35,20 +35,21 @@ public class Robot {
     private BufferedReader in;
     private Map<Integer, Future> futures;
     private readerThread read;
+    private boolean stopreading = false;
     public String robotData[];
     public static RobotMap robotMap = new RobotMap();
 
 	private int msgId;
 
 	public static final String CMD_NAVTOLOC = "NAVTOLOC",
-								CMD_NAVTOXY = "NAVTOXY",
-								CMD_GOTOLOC = "GOTOLOC",
-								CMD_GOTOXY = "GOTOXY",
-								CMD_GETPOS = "GETPOS",
-								CMD_POS = "POS",
-								CMD_SHOW_MSG = "SHOW_MSG",
-								CMD_SHOW_MSG_CONFIRM = "SHOW_MSG_CONFIRM",
-								CMD_CONFIRM = "CONFIRM";	
+            CMD_NAVTOXY = "NAVTOXY",
+            CMD_GOTOLOC = "GOTOLOC",
+            CMD_GOTOXY = "GOTOXY",
+            CMD_GETPOS = "GETPOS",
+            CMD_POS = "POS",
+            CMD_SHOW_MSG = "SHOW_MSG",
+            CMD_SHOW_MSG_CONFIRM = "SHOW_MSG_CONFIRM",
+            CMD_CONFIRM = "CONFIRM";	
 
     /**
      * Constructor, starts connection to a robot...
@@ -59,7 +60,6 @@ public class Robot {
         robotData = null;
         robotData = openSocket();
         msgId = 0;
-	read = new readerThread();
         futures = new HashMap<Integer, Future>();
         if ((robotData[1].equals("None")) || (robotData[1].equals("")) || (robotData[0] == null))  {
         	System.out.println ("No idle robot found");
@@ -76,17 +76,31 @@ public class Robot {
         }
     }
 
+    public Robot(boolean local) {
+        msgId = 0;
+        futures = new HashMap<Integer, Future>();
+        try {
+            sock = new Socket ("localhost",USER_PORT);
+            out = new PrintWriter(sock.getOutputStream());
+            in = new BufferedReader(new InputStreamReader(sock.getInputStream()));
+        } catch (IOException e) {
+            System.err.println("Error connecting to assigned robot.  Please try again.");
+            throw new RobotConnectionException("in constructor");
+        }
+    }
+
 	/**
 	 * Overriding Object.finalize() method in which we close the socket connection.
 	 * Finalize is not guaranteed to be called immediately or might not get called at all 
 	 * if the robot object is still referenced in code.
 	 */
     protected void finalize() throws Throwable {
-    try{
-		this.closeSocket();
-    }finally{
-        super.finalize();
-    }
+        try{
+            stopreading = true;
+            this.closeSocket();
+        }finally{
+            super.finalize();
+        }
     }
     /**
      * crap!  how does the server tell us which robot 
@@ -134,9 +148,10 @@ public class Robot {
 	public Future sendMsgToRobot(String... args){
 		Future fut = new Future();
 		futures.put(msgId, fut);
-		if(!read.isAlive()){
-			read.start();
-		}
+		if(read == null || !read.isAlive()){
+                    read = new readerThread();
+                    read.start();
+                }
 		StringBuilder msgToSend = new StringBuilder((msgId++) + "");
 		for (String arg : args )
 			msgToSend.append(" " + arg);
@@ -159,7 +174,7 @@ public class Robot {
 				System.exit(1);
 			}
 			String[] msgs = response.split(" ");
-			int id = Integer.parseInt(msgs[0]) -1;
+			int id = Integer.parseInt(msgs[0]);// -1;
 			Future future = futures.remove(id);
 			String[] data = Arrays.copyOfRange(msgs, 2, msgs.length);
 			if( msgs[1] != "ERROR" ){
@@ -236,7 +251,7 @@ public class Robot {
 	 * @return A Future where the position has been reached
      */
     public Future getPos() {
-		System.out.println("Getting position");
+        //System.out.println("Getting position");
         return sendMsgToRobot(CMD_GETPOS);
     }
 /**
@@ -275,7 +290,7 @@ public class Robot {
         return sendMsgToRobot(CMD_SHOW_MSG, timeout+"", msg);
     }
 
-	/**
+    /**
      * Sends a message for display on the local (robot) GUI
      * @param msg Message to display (&lt; 256 chars suggested)
 	 * @param timeout : timeout duration 
@@ -300,15 +315,14 @@ public class Robot {
     public Image getImage(int whichCamera) {    
         throw new UnsupportedOperationException();
     }
-	/**
-	 * A private thread to read the robot responses and pass them to the appropriate future
-	 */
+    /**
+     * A private thread to read the robot responses and pass them to the appropriate future
+     */
     private class readerThread extends Thread{
 	public void run(){
-		while(futures.size() > 0){
-			checkArrivedResponse();
-		}
-		
+            while(futures.size() > 0){
+                checkArrivedResponse();
+            }
 	}
     }    // may want other access to robot data but not sure what yet.
 }

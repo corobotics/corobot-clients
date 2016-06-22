@@ -94,13 +94,3 @@ public class RobotMap {
         return theMap.nodes.containsKey(name);
     }
 }
-
-/**
- * Simple to class to represent a node in the map.
- * contains a name, location and neighbors (all public)
- */
-class MapNode {
-    String name;
-    double x, y; // in meters
-    List<String> nbrs;
-}
