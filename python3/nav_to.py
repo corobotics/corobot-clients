@@ -8,7 +8,7 @@ def main():
     if len(argv) < 2:
         print("Usage: python3 nav_to.py <landmark>")
         return
-    with Robot("127.0.0.1", 15001) as r:
+    with Robot("corobot3.rit.edu", 15001) as r:
         #p = r.go_to_xy(5, 5).then(callback)
         print(r.get_pos().get())
         r.nav_to(argv[1])
