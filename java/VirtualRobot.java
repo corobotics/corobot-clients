@@ -18,6 +18,7 @@ public class VirtualRobot {
     private BufferedReader in;
     private RobotMap rmap;
     private double x, y;
+    private boolean goSlow;
     /**
      * Creates a new VirtualRobot
      */
@@ -46,11 +47,11 @@ public class VirtualRobot {
      * Simulates the act of robot movement. Waits, then continues
      * @args The id of the message telling the robot to go to a place
      */
-    public void goPlaces(int msgId){
+    public void goPlaces(int msgId, double newx, double newy){
         try{
             if (goSlow) {
-                dist = Math.sqrt((newx-x)*(newx-x) + (newy-y)*(newy-y));
-                Thread.sleep(3000*dist);
+                double dist = Math.sqrt((newx-x)*(newx-x) + (newy-y)*(newy-y));
+                Thread.sleep((long)(3000*dist));
             } else {
                 Thread.sleep(1000);
             }
