@@ -69,6 +69,20 @@ public class VirtualRobot {
     public void sendPos(int msgId){
         out.println(msgId + " POS " + x + " " + y + " 0" );
     }
+
+    /**
+     * Simulates a laser scan of data coming back from the robot
+     * @args message id
+     */
+    public void sendScan(int msgId) {
+        String scan = msgId + " SCAN ";
+        for (double ang = -0.6; ang < 0.6; ang += 0.01) {
+            double r = 2.5 * Math.cos(ang + 0.2);
+            scan += r + " " + ang + " ";
+        }
+        out.println(scan);
+    }
+    
     /**
      * Simulates the result of a confirm dialog
      * @args the message id to send with
@@ -127,6 +141,8 @@ public class VirtualRobot {
                         showConfirm(id);
                     }else if (key.equals("GETPOS")) {
                         sendPos(id);
+                    } else if (key.equals("GETSCAN")) {
+                        sendScan(id);
                     }else{
                         System.out.print("Unknown command");
                     }
