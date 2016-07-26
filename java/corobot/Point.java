@@ -24,6 +24,10 @@ public class Point {
         return y;
     }
 
+    public void setX(double d) { x = d; }
+
+    public void setY(double d) { y = d; }
+
     public String toString() {
         if (nf == null) {
             nf = NumberFormat.getInstance();
