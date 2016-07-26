@@ -124,6 +124,7 @@ public class Future{
 		while( i.hasNext() ){
 			safe_call(i.next(), data);
 		}
+                done = true;
 		awaitingIO.release();
 	}
 	/**
