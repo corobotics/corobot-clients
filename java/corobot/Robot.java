@@ -168,6 +168,7 @@ public class Robot {
         String response = null;
         try {
             response = in.readLine();
+            //System.out.println(response);
             if(response == null){
                 for(Future f: futures.values()){
                     f.error_occured("Robot Connection Closed");
@@ -272,7 +273,10 @@ public class Robot {
     public List<Point> scanStringToList(String[] data) {
         ArrayList<Point> pts = new ArrayList<Point>();
         for (int p = 0; p < data.length; p+= 2) {
-            double r = Double.parseDouble(data[p]);
+            double r;
+            if (data[p].equals("nan"))
+                r = -1;
+            else r = Double.parseDouble(data[p]);
             double th = Double.parseDouble(data[p+1]);
             pts.add(new Point(r*Math.cos(th),r*Math.sin(th)));
         }
